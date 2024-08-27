@@ -8,4 +8,6 @@ Data Analytics Boot Camp Module 10 Challenge
 - **SurfsUp/Resources/***: Data files provided for the challenge
 
 ## Instructions
-- 
+To run the Notebook section, just launch the Notebook as usual and run all cells.
+
+For the Flask application, run "Flask run" from the SurfsUp directory and open your browser to the specified local address.

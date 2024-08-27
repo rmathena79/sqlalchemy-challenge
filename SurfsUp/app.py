@@ -34,6 +34,28 @@ def OpenSession():
 app = Flask(__name__)
 
 #################################################
+# Helper Functions
+#################################################
+
+# Returns helpful dates from the datebase, as a tuple:
+# year_start: start date for the last year of available data
+# max_date  : latest date with any data
+# Both dates are strings in %Y-%m-%d format
+def dates(session):
+    # Get the latest date with any measurements:
+    max_date_result = session.query(func.max(Measurement.date)).all()
+    max_date = max_date_result[0][0]
+
+    # Calculate the date one year from the last date in data set.
+    # I didn't find a direct way to subtract years, and since leap years
+    # are a thing I don't want to use days or weeks. So just set the year.
+    max_date_dt = dt.datetime.strptime(max_date, '%Y-%m-%d')
+    year_start = dt.datetime(max_date_dt.year-1, max_date_dt.month, max_date_dt.day)
+    
+    print(f"year_start: {year_start}, max_date: {max_date}")
+    return (year_start, max_date)
+
+#################################################
 # Flask Routes
 #################################################
 @app.route("/")
@@ -53,13 +75,7 @@ def precipitation():
     """Convert the query results from your precipitation analysis (i.e. retrieve only the last 12 months of data) to a dictionary using date as the key and prcp as the value."""
     result = "ERROR" # will be replaced if query succeeds
     with OpenSession() as session:
-        dates = session.query(Measurement.date).distinct().order_by(desc(Measurement.date)).all()
-        max_date = dates[0][0]
-        # Calculate the date one year from the last date in data set.
-        # I didn't find a direct way to subtract years, and since leap years
-        # are a thing I don't want to use days or weeks. So just set the year.
-        max_date_dt = dt.datetime.strptime(max_date, '%Y-%m-%d')
-        start_date = dt.datetime(max_date_dt.year-1, max_date_dt.month, max_date_dt.day)
+        start_date, _ = dates(session)
 
         # Perform a query to retrieve the data and precipitation scores
         last_year = session.query(Measurement.date, Measurement.prcp). \
@@ -89,17 +105,8 @@ def tobs():
             group_by(Measurement.station).order_by(desc(func.count(Measurement.station))).all()        
         active_id = station_counts[0][0]   
         
-        # Find the most recent date in the data set.
-        dates = session.query(func.max(Measurement.date)).distinct().all()
-        max_date = dates[0][0]
-        
-        # Calculate the date one year from the last date in data set.
-        # I didn't find a direct way to subtract years, and since leap years
-        # are a thing I don't want to use days or weeks. So just set the year.
-        max_date_dt = dt.datetime.strptime(max_date, '%Y-%m-%d')
-        start_date = dt.datetime(max_date_dt.year-1, max_date_dt.month, max_date_dt.day)
-
         # Perform a query to retrieve the data and precipitation scores
+        start_date, _ = dates(session)
         last_year = session.query(Measurement.date, Measurement.prcp). \
             filter(Measurement.date >= func.strftime("%Y-%m-%d", start_date)). \
             filter(Measurement.station == active_id). \
@@ -112,9 +119,7 @@ def temps_start(start):
     """For a specified start, calculate TMIN, TAVG, and TMAX for all the dates greater than or equal to the start date."""
     result = "ERROR" # will be replaced if query succeeds
     with OpenSession() as session:
-        # Find the most recent date in the data set.
-        dates = session.query(func.max(Measurement.date)).distinct().all()
-        max_date = dates[0][0]
+        _, max_date = dates(session)
         result = temps_start_end(start, max_date)
     return result
 
@@ -126,7 +131,7 @@ def temps_start_end(start, end):
         results = session.query(func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)). \
             filter(Measurement.date >= func.strftime("%Y-%m-%d", start)). \
             filter(Measurement.date <= func.strftime("%Y-%m-%d", end)). \
-            order_by(Measurement.date).all()       
+            order_by(Measurement.date).all()
         result = jsonify(list(np.ravel(results)))
     return result    
 
